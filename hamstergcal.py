@@ -3,6 +3,9 @@
 
 import sqlite3 as sql
 
+from gdata.calendar import client
+from gdata.gauth import ClientLoginToken
+
 # TODO: find out how to find Hamster's db location
 db_path = u"/home/mariano/.local/share/hamster-applet/hamster.db"
 source = "hamster-gcalendar"
@@ -11,11 +14,12 @@ conn = None
 def get_sqlite_cursor():
     """Return a sqlite's cursor. If connection is None, connect first"""
     global conn
-    global db_path
     if conn is None:
         conn = sql.connect(db_path)
         conn.row_factory = sql.Row
     return conn.cursor()
+
+class GoogleParametersError(Exception): pass
 
 class GoogleParameters(object):
     """Poor man's ORM for data stored in the db"""
@@ -30,7 +34,7 @@ class GoogleParameters(object):
             self._token_string = None
             self._last_update = None
             self.cur.execute("insert into google_parameters values (?, ?)",
-                             (self.token_string, self.last_update))
+                             (self._token_string, self._last_update))
             conn.commit()
         else:
             self._token_string = r['token_string']
@@ -63,13 +67,30 @@ class GoogleParameters(object):
                              (self._last_update,))
             conn.commit()
 
-def gcalendar_connect(user, password):
+def gcalendar_connect(user=None, password=None):
     """If this is the first time we connect, we need to pass user and password.
-    If we connect ok, we can get an auth token we can save in the database
+    If we connect ok, we can get an auth token we can save in the database and
+    don't ask for the user and password again.
+    If everything's ok, we return the gc (GoogleCalendar) connection
     """
     param = GoogleParameters()
+    gc = client.CalendarClient(source=source)
     if param.token_string is None:
-        pass
+        # we never connected or we lost our token
+        try:
+            gc.ClientLogin(user, password, client.source)
+        except Exception, e:
+            raise(GoogleParametersError("We couldn't connect with Google. We "
+                                        "got %s error and this was the "
+                                        "companion message: %s" %\
+                                        (e.__class__.__name__, e.args[0])))
+
+        # let's get a new token and keep on going
+        param.token_string = gc.auth_token.token_string
+    else:
+        gc.auth_token = ClientLoginToken(param.token_string)
+    return gc
+
 
 
 
