@@ -1,13 +1,16 @@
 # -*- coding: UTF-8 -*-
 """Send all events stored in Hamster to Google Calendar"""
-
+import datetime
 import sqlite3 as sql
+import os.path
+
+from dateutil import parser
 
 from gdata.calendar import client
 from gdata.gauth import ClientLoginToken
 
 # TODO: find out how to find Hamster's db location
-db_path = u"/home/mariano/.local/share/hamster-applet/hamster.db"
+db_path = os.path.expanduser(u"~/.local/share/hamster-applet/hamster.db")
 source = "hamster-gcalendar"
 conn = None
 
@@ -74,6 +77,8 @@ class GoogleParameters(object):
                              (self._last_update,))
             conn.commit()
 
+param = GoogleParameters()
+
 def gcalendar_connect(user=None, password=None):
     """Routine for connecting with a Google Calendar account. 
     If this is the first time we connect, we need to send the user and password
@@ -81,24 +86,45 @@ def gcalendar_connect(user=None, password=None):
     the database and don't ask for the user and password again.
     If everything's ok, we return the gc (GoogleCalendar) connection
     """
-    param = GoogleParameters()
+    global param
     gc = client.CalendarClient(source=source)
-    if param.token_string is None:
-        # we never connected or we lost our token
-        try:
+    try:
+        if param.token_string is None:
+            # we never connected or we lost our token
             gc.ClientLogin(user, password, client.source)
-        except Exception, e:
-            raise(GoogleParametersError("We couldn't connect with Google. We "
-                                        "got %s error and this was the "
-                                        "companion message: %s" %\
-                                        (e.__class__.__name__, e.args[0])))
-
-        # let's get a new token and keep on going
-        param.token_string = gc.auth_token.token_string
-    else:
-        gc.auth_token = ClientLoginToken(param.token_string)
+            # let's get a new token and keep on going
+            param.token_string = gc.auth_token.token_string
+        else:
+            # we have a token, let's connect
+            gc.auth_token = ClientLoginToken(param.token_string)
+    except Exception, e:
+        raise(GoogleParametersError("We couldn't connect with Google. We "
+                                    "got %s error and this was the "
+                                    "companion message: %s" %\
+                                    (e.__class__.__name__, e.args[0])))
     return gc
 
-
-
-
+def collect_new_events():
+    """Look for new events in the database that were added after the last time
+    we upload something to google calendar. Return a list of sqlite's
+    rows. The returned structure should be as follows:
+        start_time: start date of the activity, unicode
+        end_time: end date of the activity, unicode
+        description: self explained
+        tag: self explained
+        activity: id.
+        timestamp: this moment
+    """
+    global param
+    # qry string to bring all the required data
+    qry = "SELECT facts.start_time as start_time, facts.end_time as end_time,"\
+          "facts.description as description, tags_fact.name as tag, "\
+          "activities.name as activity, ? as timestamp FROM facts "\
+          "inner join activities on (facts.activity_id=activities.id) "\
+          "inner join (select tags.id, tags.name, fact_tags.fact_id from "\
+          "tags inner join fact_tags on (tags.id=fact_tags.tag_id)) as "\
+          "tags_fact on (facts.id=tags_fact.fact_id) where facts.end_time "\
+          "is not null and facts.end_time>=? order by facts.start_time"
+    cur = get_sqlite_cursor()
+    cur.execute(qry, (datetime.datetime.now(), param.last_update))
+    return cur.fetchall()
