@@ -4,7 +4,6 @@ import datetime
 import sqlite3 as sql
 import os.path
 
-from dateutil import parser
 import atom
 from gdata.calendar import client, data
 from gdata.gauth import ClientLoginToken
@@ -164,6 +163,21 @@ def insert_event(calendar, event_title, event_description, event_st,
     event.when.append(data.When(start=start_time, end=end_time))
     new_event = calendar.InsertEvent(event)
     return new_event
+
+def iter_new_events(gc, events):
+    """Inspect new events and insert in the corresponding calendar
+    accordingly"""
+    cal_feed = gc.get_own_calendars_feed()
+    ev_res = []
+    for i in cal_feed.entry:
+        for j in [l for l in events if l['tag'].upper()==i.title.text.upper()]:
+            #datetime.datetime.strptime(j['start_time'], '%Y-%m-%d %H:%M:%S')
+            pass
+
+if __name__ == '__main__':
+    gc = gcalendar_connect()
+    events = collect_new_events()
+
 
 
 
