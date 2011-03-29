@@ -5,8 +5,8 @@ import sqlite3 as sql
 import os.path
 
 from dateutil import parser
-
-from gdata.calendar import client
+import atom
+from gdata.calendar import client, data
 from gdata.gauth import ClientLoginToken
 
 # TODO: find out how to find Hamster's db location
@@ -124,7 +124,48 @@ def collect_new_events():
           "inner join (select tags.id, tags.name, fact_tags.fact_id from "\
           "tags inner join fact_tags on (tags.id=fact_tags.tag_id)) as "\
           "tags_fact on (facts.id=tags_fact.fact_id) where facts.end_time "\
-          "is not null and facts.end_time>=? order by facts.start_time"
+          "is not null and facts.end_time>=? order by tags_fact.name, "\
+          "facts.start_time"
     cur = get_sqlite_cursor()
     cur.execute(qry, (datetime.datetime.now(), param.last_update))
     return cur.fetchall()
+
+def create_calendar(gc, name, summary):
+    """Create a new calendar in Google. You need to pass the calendar name and
+    the summary."""
+    calendar = data.CalendarEntry()
+    calendar.title = atom.data.Title(text=name)
+    calendar.summary = atom.data.Summary(text=summary)
+    new_calendar = gc.InsertCalendar(new_calendar=calendar)
+    return new_calendar
+
+def insert_event(calendar, event_title, event_description, event_st,
+                 event_et):
+    """Insert a new event in a given calendar"""
+    # paranoid check
+    if not isinstance(calendar, data.CalendarEventFeed):
+        raise(Exception("calendar must be an instance of CalendarEventFeed"))
+    event = data.CalendarEventEntry()
+    event.title = atom.data.Title(text=event_title)
+    event.content = atom.data.Content(text=event_description)
+    event.content = atom.data.Content(text=event_description)
+    start_time = "%04d-%02d-%02dT%02d:%02d:%02d" % (event_st.year,
+                                                    event_st.month,
+                                                    event_st.day,
+                                                    event_st.hour,
+                                                    event_st.minute,
+                                                    event_st.second)
+    end_time = "%04d-%02d-%02dT%02d:%02d:%02d" % (event_et.year,
+                                                  event_et.month,
+                                                  event_et.day,
+                                                  event_et.hour,
+                                                  event_et.minute,
+                                                  event_et.second)
+    event.when.append(data.When(start=start_time, end=end_time))
+    new_event = calendar.InsertEvent(event)
+    return new_event
+
+
+
+
+
