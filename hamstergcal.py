@@ -167,12 +167,18 @@ def insert_event(calendar, event_title, event_description, event_st,
 def iter_new_events(gc, events):
     """Inspect new events and insert in the corresponding calendar
     accordingly"""
+    used_cals = []
     cal_feed = gc.get_own_calendars_feed()
     ev_res = []
     for i in cal_feed.entry:
         for j in [l for l in events if l['tag'].upper()==i.title.text.upper()]:
-            #datetime.datetime.strptime(j['start_time'], '%Y-%m-%d %H:%M:%S')
-            pass
+            insert_event(i, j['activity'], j['description'], 
+                         datetime.datetime.strptime(j['start_time'], 
+                                                    '%Y-%m-%d %H:%M:%S'),
+                         datetime.datetime.strptime(j['end_time'], 
+                                                    '%Y-%m-%d %H:%M:%S'))
+            # if the tag is in this list, we used this cal.
+            used_cals.append(l['tag'])
 
 if __name__ == '__main__':
     gc = gcalendar_connect()
